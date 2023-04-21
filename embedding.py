@@ -11,7 +11,7 @@ from langchain.docstore.document import Document
 
 
 # 将文件中的文字拆分成小的文件Embedding并持久化
-def persist_embedding(text):
+def persist_embedding(text, docName):
     documents = [Document(page_content=text)]
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=300,
@@ -24,5 +24,6 @@ def persist_embedding(text):
     # embedding = HuggingFaceInstructEmbeddings()
     vectorstore = FAISS.from_documents(docs, embedding)
     # Save vectorstore
-    with open("vectorstore.pkl", "wb") as f:
+    directory_path = os.path.dirname(os.path.abspath(__file__))
+    with open(directory_path + "/db/" + docName + "-vectorstore.pkl", "wb") as f:
         pickle.dump(vectorstore, f)

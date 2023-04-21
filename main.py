@@ -46,8 +46,9 @@ async def init(*, info: Info):
     doc_type = info.doc_type
     item = patent_id + '@' + doc_type
     if item in ids:
+        print("ids contains")
         return 'success'
-    persist_embedding(docs)
+    persist_embedding(docs, item)
     ids.append(item)
     return 'success'
 
@@ -57,18 +58,25 @@ async def get(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
-@app.websocket("/chat")
+@app.websocket("/chat/{patent_id}/{doc_type}")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
     question_handler = QuestionGenCallbackHandler(websocket)
     stream_handler = StreamingLLMCallbackHandler(websocket)
     chat_history = []
-
+    patent_id = websocket.path_params.get("patent_id")
+    doc_type = websocket.path_params.get("doc_type")
     logging.info("loading vectorstore")
-    if not Path("vectorstore.pkl").exists():
-        raise ValueError("vectorstore.pkl does not exist, please run ingest.py first")
-    with open("vectorstore.pkl", "rb") as f:
+    directory_path = os.path.dirname(os.path.abspath(__file__))
+    item = patent_id + '@' + doc_type
+    if item not in ids:
+        raise ValueError("vectorstore_path does not exist, please init first")
+    vectorstore_path = directory_path + "/db/" + item + "-vectorstore.pkl"
+    print("current path:" + vectorstore_path)
+    if not Path(vectorstore_path).exists():
+        raise ValueError("vectorstore.pkl does not exist, please init first")
+    with open(vectorstore_path, "rb") as f:
         global vectorstore
         vectorstore = pickle.load(f)
 
@@ -83,19 +91,15 @@ async def websocket_endpoint(websocket: WebSocket):
             question = await websocket.receive_text()
             resp = ChatResponse(sender="you", message=question, type="stream")
             await websocket.send_json(resp.dict())
-            print(resp)
             # Construct a response
             start_resp = ChatResponse(sender="bot", message="", type="start")
             await websocket.send_json(start_resp.dict())
-            print(start_resp)
             result = await qa_chain.acall(
                 {"question": question, "chat_history": chat_history}
             )
-            print(result)
             chat_history.append((question, result["answer"]))
 
             end_resp = ChatResponse(sender="bot", message="", type="end")
-            print(end_resp)
             await websocket.send_json(end_resp.dict())
         except WebSocketDisconnect:
             logging.info("websocket disconnect")
@@ -110,7 +114,27 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json(resp.dict())
 
 
+def del_file(path):
+    ls = os.listdir(path)
+    for i in ls:
+        c_path = os.path.join(path, i)
+        if os.path.isdir(c_path):  # 如果是文件夹那么递归调用一下
+            del_file(c_path)
+        else:  # 如果是一个文件那么直接删除
+            os.remove(c_path)
+    print('文件已经清空完成')
+
+
 if __name__ == "__main__":
     import uvicorn
 
+    # clear db file
+    # path = os.path.dirname(os.path.abspath(__file__)) + "/db"
+    # del_file(path)
+
+    # prepare ids
+    path = os.path.dirname(os.path.abspath(__file__)) + "/db"
+    ls = os.listdir(path)
+    for i in ls:
+        ids.append(i.removesuffix('-vectorstore.pkl'))
     uvicorn.run(app, host="0.0.0.0", port=9000)
