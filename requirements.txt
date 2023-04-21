@@ -1,0 +1,15 @@
+langchain==0.0.124 
+openai
+fastapi~=0.95.0
+black
+isort
+websockets
+pydantic~=1.10.7
+uvicorn~=0.21.1
+jinja2
+faiss-cpu
+bs4
+unstructured
+libmagic
+InstructorEmbedding
+starlette~=0.26.1
